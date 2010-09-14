@@ -135,6 +135,23 @@ module Jabber
         send(Jabber::Presence.new.set_type(:unavailable))
       end
 
+      ##
+      # Send a body element with xmpp:restart set to true.
+      def restart
+        r = REXML::Element.new 'body'
+        r.attributes['rid'] = @http_rid += 1
+        r.attributes['sid'] = @http_sid
+        r.attributes['to'] = @jid.domain
+        r.attributes['xmlns'] = 'http://jabber.org/protocol/httpbind'
+        r.attributes['xmlns:xmpp'] = 'urn:xmpp:xbosh'
+        r.attributes['xmpp:restart'] = 'true'
+        s = post(r)
+        unless s.name == 'body'
+          raise 'Response body is no <body/> element'
+        end
+        receive_elements_with_rid(@http_rid, s.children)
+      end
+
       private
 
       ##

@@ -95,6 +95,13 @@ module Jabber
     end
 
     ##
+    # Restarts the stream, e.g. after SASL start-up.
+    def restart
+      stop
+      start
+    end
+
+    ##
     # Authenticate with the server
     #
     # Throws ClientAuthenticationFailure
@@ -171,8 +178,7 @@ module Jabber
       sasl.auth(password)
 
       # Restart stream after SASL auth
-      stop
-      start
+      restart
       # And wait for features - again
       @features_sem.wait
 
