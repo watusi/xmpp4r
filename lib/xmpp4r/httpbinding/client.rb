@@ -192,7 +192,8 @@ module Jabber
           begin
             @lock.synchronize {
               # Do not send unneeded requests
-              if data.size < 1 and @pending_requests > 0
+              @pending_requests += 1
+              if data.size < 1 and @pending_requests > 1
                 return
               end
 
@@ -205,7 +206,6 @@ module Jabber
               req_body += "</body>"
               current_rid = @http_rid
 
-              @pending_requests += 1
               @last_send = Time.now
             }
 
