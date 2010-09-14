@@ -44,14 +44,16 @@ module Jabber
       ##
       # Initialize
       # jid:: [JID or String]
-      def initialize(jid)
-        super
+      # proxy:: [Net::HTTP] Proxy class (via Net::HTTP::Proxy).
+      def initialize(jid, proxy=nil)
+        super(jid)
 
         @lock = Mutex.new
         @pending_requests = 0
         @last_send = Time.at(0)
         @send_buffer = ''
 
+        @http = proxy || Net::HTTP
         @http_requests = 1
         @http_wait = 20
         @http_hold = 1
@@ -158,7 +160,7 @@ module Jabber
         request.body = body
         request['Content-Type'] = @http_content_type
         Jabber::debuglog("HTTP REQUEST (#{@pending_requests + 1}/#{@http_requests}):\n#{request.body}")
-        response = Net::HTTP.start(@uri.host, @uri.port) { |http|
+        response = @http.start(@uri.host, @uri.port) { |http|
           http.use_ssl = true if @uri.kind_of? URI::HTTPS
           http.request(request)
         }
