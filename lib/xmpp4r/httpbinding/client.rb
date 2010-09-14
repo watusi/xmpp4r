@@ -91,6 +91,8 @@ module Jabber
         end
         req_body.attributes['secure'] = 'true'
         req_body.attributes['xmlns'] = 'http://jabber.org/protocol/httpbind'
+        req_body.attributes['xmlns:xmpp'] = 'urn:xmpp:xbosh'
+        req_body.attributes['xmpp:version'] = '1.0'
         res_body = post(req_body)
         unless res_body.name == 'body'
           raise 'Response body is no <body/> element'
