@@ -188,6 +188,8 @@ module Jabber
         request.body = body
         request['Content-Type'] = @http_content_type
         opts = {
+          :read_timeout => nil,					# Avoid unwanted exceptions when @http_wait > 60
+                                        # (Net::HTTP has a default 60-second timeout)
           :use_ssl => @use_ssl, 				# Set SSL/no SSL
           :verify_mode => @verify_mode  # Allow caller to defeat certificate verify
         }
