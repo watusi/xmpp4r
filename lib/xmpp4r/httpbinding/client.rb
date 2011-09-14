@@ -73,9 +73,7 @@ module Jabber
       def connect(uri, host=nil, port=5222, opts={})
         uri = URI::parse(uri) unless uri.kind_of? URI::Generic
         @uri = uri
-        p "opts = #{opts.inspect}"
         opts = {:ssl_verify => true}.merge(opts)
-        p "opts = #{opts.inspect}"
 
         @use_ssl = @uri.kind_of? URI::HTTPS
         @protocol_name = "HTTP#{'S' if @use_ssl}"
