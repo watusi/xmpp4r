@@ -69,9 +69,17 @@ module Jabber
       # uri:: [URI::Generic or String]
       # host:: [String] Optional host to route to
       # port:: [Fixnum] Port for route feature
-      def connect(uri, host=nil, port=5222)
+      # opts:: [Hash] :ssl_verify => false to defeat peer certificate verify
+      def connect(uri, host=nil, port=5222, opts={})
         uri = URI::parse(uri) unless uri.kind_of? URI::Generic
         @uri = uri
+        p "opts = #{opts.inspect}"
+        opts = {:ssl_verify => true}.merge(opts)
+        p "opts = #{opts.inspect}"
+
+        @use_ssl = @uri.kind_of? URI::HTTPS
+        @protocol_name = "HTTP#{'S' if @use_ssl}"
+        @verify_mode = opts[:ssl_verify] ? OpenSSL::SSL::VERIFY_PEER : OpenSSL::SSL::VERIFY_NONE
 
         @allow_tls = false  # Shall be done at HTTP level
         @stream_mechanisms = []
@@ -86,6 +94,7 @@ module Jabber
         req_body.attributes['hold'] = @http_hold.to_s
         req_body.attributes['wait'] = @http_wait.to_s
         req_body.attributes['to'] = @jid.domain
+        req_body.attributes['ver'] = '1.8'
         if host
           req_body.attributes['route'] = "xmpp:#{host}:#{port}"
         end
@@ -178,12 +187,15 @@ module Jabber
         request.content_length = body.size
         request.body = body
         request['Content-Type'] = @http_content_type
-        Jabber::debuglog("HTTP REQUEST (#{@pending_requests + 1}/#{@http_requests}):\n#{request.body}")
-        response = @http.start(@uri.host, @uri.port) { |http|
-          http.use_ssl = true if @uri.kind_of? URI::HTTPS
+        opts = {
+          :use_ssl => @use_ssl, 				# Set SSL/no SSL
+          :verify_mode => @verify_mode  # Allow caller to defeat certificate verify
+        }
+        Jabber::debuglog("#{@protocol_name} REQUEST (#{@pending_requests + 1}/#{@http_requests}):\n#{request.body}")
+        response = @http.start(@uri.host, @uri.port, nil, nil, nil, nil, opts ) { |http|
           http.request(request)
         }
-        Jabber::debuglog("HTTP RESPONSE (#{@pending_requests + 1}/#{@http_requests}): #{response.class}\n#{response.body}")
+        Jabber::debuglog("#{@protocol_name} RESPONSE (#{@pending_requests + 1}/#{@http_requests}): #{response.class}\n#{response.body}")
 
         unless response.kind_of? Net::HTTPSuccess
           # Unfortunately, HTTPResponses aren't exceptions
@@ -242,7 +254,7 @@ module Jabber
               close; @exception_block.call(e, self, :parser)
             end
           else
-            Jabber::debuglog "Exception caught when parsing HTTP response!"
+            Jabber::debuglog "Exception caught when parsing #{@protocol_name} response!"
             close
             raise
           end
