@@ -227,7 +227,7 @@ module Jabber
         # Server will disconnect @http_inactivity seconds after receiving previous client
         # response, unless it receives the post we are now sending.
         # Net::HTTP defaults to 60 seconds, which would not always be appropriate.
-        # In particular, the default wouldf not work if @http_wait is > 60!
+        # In particular, the default would not work if @http_wait is > 60!
         if @initial_post == true
           read_timeout = @http_connect
           @initial_post = false
