@@ -47,17 +47,13 @@ module Jabber
       # proxy:: [Net::HTTP] Proxy class (via Net::HTTP::Proxy).
       def initialize(jid, proxy=nil)
         super(jid)
-
         @lock = Mutex.new
-        @pending_requests = 0
-        @last_send = Time.at(0)
-        @send_buffer = ''
-
         @http = proxy || Net::HTTP
-        @http_requests = 1
         @http_wait = 20
         @http_hold = 1
         @http_content_type = 'text/xml; charset=utf-8'
+        @allow_tls = false      # Shall be done at HTTP level
+        initialize_for_connect  # Actually unnecessary, but nice to have these variables defined here
       end
 
       ##
@@ -70,18 +66,48 @@ module Jabber
       # host:: [String] Optional host to route to
       # port:: [Fixnum] Port for route feature
       # opts:: [Hash] :ssl_verify => false to defeat peer certificate verify
+      #        [Fixnum] :http_inactivity => value to use for http_inactivity in
+      #                 case the server does not specify.
+      #        [Fixnum] :http_connect => time in seconds to wait for initial
+      #                 connection.
       def connect(uri, host=nil, port=5222, opts={})
+
+        initialize_for_connect  # Initial/default values for new connection, in case
+                                # of connect/close/connect/close/connect on same object...
+
         uri = URI::parse(uri) unless uri.kind_of? URI::Generic
         @uri = uri
-        opts = {:ssl_verify => true}.merge(opts)
+
+        opts = {
+          :ssl_verify => true,
+
+          # When we make the first post, we have no clue what value the server uses for
+          # http_inactivity, since we haven't connected yet!
+          :http_connect => 60,
+
+          # As well, it's possible the server will NOT specify http_inactivity.
+          # XEP-0124 states:
+          #
+          # "If the connection manager did not specify a maximum inactivity period
+          # in the session creation response, then it SHOULD allow the client to be
+          # inactive for as long as it chooses."
+          #
+          # So, we need to default this. If the server sends http_inactivity, then
+          # that value will override our default.
+          :http_inactivity => 60
+
+          # In either case, if the client application has advance knowledge of the values
+          # used by the server, then it should override these defaults using opts.
+
+          }.merge(opts)
 
         @use_ssl = @uri.kind_of? URI::HTTPS
         @protocol_name = "HTTP#{'S' if @use_ssl}"
         @verify_mode = opts[:ssl_verify] ? OpenSSL::SSL::VERIFY_PEER : OpenSSL::SSL::VERIFY_NONE
 
-        @allow_tls = false  # Shall be done at HTTP level
-        @stream_mechanisms = []
-        @stream_features = {}
+        @http_connect = opts[:http_connect].to_i
+        @http_inactivity = opts[:http_inactivity].to_i
+
         @http_rid = IdGenerator.generate_id.to_i
         @pending_rid = @http_rid
         @pending_rid_lock = Semaphore.new
@@ -110,7 +136,7 @@ module Jabber
         @http_sid = res_body.attributes['sid']
         @http_wait = res_body.attributes['wait'].to_i if res_body.attributes['wait']
         @http_hold = res_body.attributes['hold'].to_i if res_body.attributes['hold']
-        @http_inactivity = res_body.attributes['inactivity'].to_i
+        @http_inactivity = res_body.attributes['inactivity'].to_i if res_body.attributes['inactivity']
         @http_polling = res_body.attributes['polling'].to_i
         @http_polling = 5 if @http_polling == 0
         @http_requests = res_body.attributes['requests'].to_i
@@ -161,6 +187,18 @@ module Jabber
 
       private
 
+      # (re)initialize instances vars prior to connect()
+      def initialize_for_connect
+        @initial_post = true
+        @http_requests = 1
+        @pending_requests = 0
+        @last_send = Time.at(0)
+        @previous_send = Time.at(0)
+        @send_buffer = ''
+        @stream_mechanisms = []
+        @stream_features = {}
+      end
+
       ##
       # Receive stanzas ensuring that the 'rid' order is kept
       # result:: [REXML::Element]
@@ -185,13 +223,26 @@ module Jabber
         request.content_length = body.size
         request.body = body
         request['Content-Type'] = @http_content_type
+
+        # Server will disconnect @http_inactivity seconds after receiving previous client
+        # response, unless it receives the post we are now sending.
+        # Net::HTTP defaults to 60 seconds, which would not always be appropriate.
+        # In particular, the default wouldf not work if @http_wait is > 60!
+        if @initial_post == true
+          read_timeout = @http_connect
+          @initial_post = false
+        elsif @previous_send == Time.at(0)
+          read_timeout = @http_inactivity + 1
+        else
+          read_timeout = (Time.now - @previous_send).ceil + @http_inactivity
+        end
+
         opts = {
-          :read_timeout => nil,					# Avoid unwanted exceptions when @http_wait > 60
-                                        # (Net::HTTP has a default 60-second timeout)
-          :use_ssl => @use_ssl, 				# Set SSL/no SSL
-          :verify_mode => @verify_mode  # Allow caller to defeat certificate verify
+          :read_timeout => read_timeout, # wait this long for a response
+          :use_ssl => @use_ssl, 				 # Set SSL/no SSL
+          :verify_mode => @verify_mode   # Allow caller to defeat certificate verify
         }
-        Jabber::debuglog("#{@protocol_name} REQUEST (#{@pending_requests + 1}/#{@http_requests}):\n#{request.body}")
+        Jabber::debuglog("#{@protocol_name} REQUEST (#{@pending_requests + 1}/#{@http_requests}) with timeout #{read_timeout}:\n#{request.body}")
         response = @http.start(@uri.host, @uri.port, nil, nil, nil, nil, opts ) { |http|
           http.request(request)
         }
@@ -235,7 +286,9 @@ module Jabber
               req_body += "</body>"
               current_rid = @http_rid
 
+              @previous_send = @last_send
               @last_send = Time.now
+
             }
 
             res_body = post(req_body)
