@@ -2,13 +2,17 @@
 # License:: Ruby's license (see the LICENSE file) or GNU GPL, at your option.
 # Website::http://home.gna.org/xmpp4r/
 
-require 'logger'
+require 'logger' if !defined? Rhodes::VERSION
 
 module Jabber
   def Jabber::logger
-    @@logger ||= Logger.new($stderr)
+    if defined? Rhodes::VERSION
+      @@logger ||= RhoLog.new
+    else
+      @@logger ||= Logger.new($stderr)
+    end
   end
-  
+
   # Set the logger to use for debug and warn (if enabled)
   def Jabber::logger=(logger)
     @@logger = logger
@@ -51,13 +55,21 @@ module Jabber
   # first one. Time is prepended to the string.
   def Jabber::debuglog(string)
     return if not @@debug
-    logger.debug string.chomp.gsub("\n", "\n    ")
+    if defined? Rhodes::VERSION
+      logger.info 'XMPP4R', string.chomp   # Note Rhodes currently lacks a debug logger method
+    else
+      logger.debug string.chomp.gsub("\n", "\n    ")
+    end
   end
-  
+
   # Outputs a string only if warnings mode is enabled.
   def Jabber::warnlog(string)
     return if not @@warnings
-    logger.warn string.chomp.gsub("\n", "\n    ")
+    if defined? Rhodes::VERSION
+      logger.info 'XMPP4R', string.chomp
+    else
+      logger.warn string.chomp.gsub("\n", "\n    ")
+    end
   end
-  
+
 end
