@@ -103,7 +103,7 @@ module Jabber
 
         @use_ssl = @uri.kind_of? URI::HTTPS
         @protocol_name = "HTTP#{'S' if @use_ssl}"
-        @verify_mode = opts[:ssl_verify] ? OpenSSL::SSL::VERIFY_PEER : OpenSSL::SSL::VERIFY_NONE
+        @verify_mode = opts[:ssl_verify] ? OpenSSL::SSL::VERIFY_PEER : OpenSSL::SSL::VERIFY_NONE if @use_ssl
 
         @http_connect = opts[:http_connect].to_i
         @http_inactivity = opts[:http_inactivity].to_i
@@ -239,9 +239,10 @@ module Jabber
 
         opts = {
           :read_timeout => read_timeout, # wait this long for a response
-          :use_ssl => @use_ssl, 				 # Set SSL/no SSL
-          :verify_mode => @verify_mode   # Allow caller to defeat certificate verify
+          :use_ssl => @use_ssl           # Set SSL/no SSL
         }
+        opts[:verify_mode] =  @verify_mode if @use_ssl   # Allow caller to defeat certificate verify
+
         Jabber::debuglog("#{@protocol_name} REQUEST (#{@pending_requests + 1}/#{@http_requests}) with timeout #{read_timeout}:\n#{request.body}")
         response = @http.start(@uri.host, @uri.port, nil, nil, nil, nil, opts ) { |http|
           http.request(request)
