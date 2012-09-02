@@ -7,7 +7,8 @@ require 'logger' if !defined? Rhodes::VERSION
 module Jabber
   def Jabber::logger
     if defined? Rhodes::VERSION
-      @@logger ||= RhoLog.new
+      # < Rhodes 3.4.2 RhoLog was a class. Now it is a module
+      @@logger ||= RhoLog.class == Class ? Rholog.new : RhoLog
     else
       @@logger ||= Logger.new($stderr)
     end
