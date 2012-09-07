@@ -6,7 +6,15 @@
 
 require 'xmpp4r/client'
 require 'xmpp4r/semaphore'
-require 'net/http'
+# In Rhodes you have to require net/https if you use SSL, but then openssl is required in net/https
+# unconditionally. So, see if OpenSSL is defined, and if so require net/https.
+# However, this won't work presently (as of Rhodes 3.4.2) because Rhodes net-http https support
+# is broken. You will get an EOF instead of content.
+if defined? Rhodes::VERSION
+  require 'net/http' + ( (defined? OpenSSL) ? 's' : '')
+else
+  require 'net/http'
+end
 
 module Jabber
   module HTTPBinding
